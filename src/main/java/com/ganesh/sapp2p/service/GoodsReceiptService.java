@@ -61,12 +61,10 @@ public class GoodsReceiptService {
 				.sum();
 
 		double unitPrice = po.getNetPrice() / po.getQuantity();
-		double totalInvoiceAmount = totalGRQty * unitPrice;
+//		double totalInvoiceAmount = totalGRQty * unitPrice;
 
-		invoices.forEach(inv -> {
-			inv.setInvoiceAmount(unitPrice * grRepo.findByPoNumber(po.getPoNumber()).stream()
-					.filter(g -> g.getGrNumber().equals(inv.getGrNumber())).mapToInt(GoodsReceipt::getReceivedQuantity)
-					.sum());
+		for(Invoice inv:invoices) {
+		inv.setInvoiceAmount(totalGRQty*unitPrice);
 
 			if (totalGRQty == po.getQuantity()) {
 				inv.setInvoiceStatus("MATCHED");
@@ -74,7 +72,7 @@ public class GoodsReceiptService {
 				inv.setInvoiceStatus("BLOCKED");
 			}
 			irRepo.save(inv);
-		});
+		};
 		return grRepo.save(gr);
 	}
 
