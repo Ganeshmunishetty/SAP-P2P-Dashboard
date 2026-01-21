@@ -26,60 +26,31 @@ public class InvoiceService {
 	}
 
 	public Invoice createIR(Invoice invoice) {
-
 	    PurchaseOrder po = poRepo.findByPoNumber(invoice.getPoNumber())
-	            .orElseThrow(() -> new RuntimeException("PO not Found"));
+	            .orElseThrow(() -> new RuntimeException("PO not Found: " + invoice.getPoNumber()));
 
-	    List<GoodsReceipt> grList = grRepo.findByPoNumber(invoice.getPoNumber());
-
-	    if (grList.isEmpty()) {
-	        invoice.setInvoiceStatus("BLOCKED");
-	        invoice.setInvoiceAmount(0);
-	        return irRepo.save(invoice);
-	    }
-
-	    // Total quantity received from all GRs
-	    int totalReceivedQty = grList.stream().mapToInt(GoodsReceipt::getReceivedQuantity).sum();
-
-	    // Unit price per item
-	    double unitPrice = po.getNetPrice() / po.getQuantity();
-
-	    // Calculate invoice amount based on received quantity
-	    double calculatedInvoiceAmount = totalReceivedQty * unitPrice;
-	    invoice.setInvoiceAmount(calculatedInvoiceAmount);
-
-	    // Auto-generate invoice number per PO
+	    // Auto-generate IR number
 	    if (invoice.getInvoiceNumber() == null || invoice.getInvoiceNumber().isEmpty()) {
-	        int irCount = irRepo.findByPoNumber(invoice.getPoNumber()).size() + 1;
-	        invoice.setInvoiceNumber(invoice.getPoNumber() + "-IR" + irCount);
+	        int nextIR = irRepo.findByPoNumber(invoice.getPoNumber()).size() + 1;
+	        invoice.setInvoiceNumber(po.getPoNumber() + "-IR" + nextIR);
 	    }
 
-	    // Total invoiced amount including this invoice
-	    double totalInvoiceAmount = irRepo.findByPoNumber(invoice.getPoNumber())
-	                                      .stream()
-	                                      .mapToDouble(Invoice::getInvoiceAmount)
-	                                      .sum() + calculatedInvoiceAmount;
+	    // Calculate invoice amount based on total GR received
+	    List<GoodsReceipt> grList = grRepo.findByPoNumber(po.getPoNumber());
+	    int totalGRQty = grList.stream().mapToInt(GoodsReceipt::getReceivedQuantity).sum();
+	    double unitPrice = po.getNetPrice() / po.getQuantity();
+	    double calculatedAmount = totalGRQty * unitPrice;
+	    invoice.setInvoiceAmount(calculatedAmount);
 
-	    // Use a small tolerance for floating-point comparison
-	    double tolerance = 0.01;
-
-	    if (totalReceivedQty == po.getQuantity() &&
-	        Math.abs(totalInvoiceAmount - po.getNetPrice()) < tolerance) {
-
+	    // Determine initial status for the new IR
+	    if (totalGRQty == po.getQuantity()&& calculatedAmount == po.getNetPrice()) {
 	        invoice.setInvoiceStatus("MATCHED");
-
-	        // Update all previous invoices for this PO
-	        irRepo.findByPoNumber(invoice.getPoNumber()).forEach(inv -> {
-	            inv.setInvoiceStatus("MATCHED");
-	            irRepo.save(inv);
-	        });
 	    } else {
 	        invoice.setInvoiceStatus("BLOCKED");
 	    }
 
 	    return irRepo.save(invoice);
 	}
-
 
 	public List<Invoice> getAllIRs() {
 		return irRepo.findAll();

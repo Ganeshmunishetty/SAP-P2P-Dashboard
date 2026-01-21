@@ -26,5 +26,7 @@ public class PurchaseOrder {
 	private double netPrice;
 	@Column(nullable=false)
 	private String vendorName;
+	@Column(nullable = false)
+	private String poStatus="Created";
 	
 }

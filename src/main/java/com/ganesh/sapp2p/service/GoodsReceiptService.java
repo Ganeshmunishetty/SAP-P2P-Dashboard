@@ -32,6 +32,10 @@ public class GoodsReceiptService {
 		PurchaseOrder po = poRepo.findByPoNumber(gr.getPoNumber())
 				.orElseThrow(() -> new RuntimeException("PO number Not Found " + gr.getPoNumber()));
 
+		if(po.getPoStatus().equals("GR_Completed")||po.getPoNumber().equals("IR_Completed")) {
+			throw new RuntimeException("GR not allowed. PO already Completed.");
+		}
+		
 		int TotalReceived = grRepo.findByPoNumber(gr.getPoNumber()).stream().mapToInt(GoodsReceipt::getReceivedQuantity)
 				.sum();
 
@@ -41,6 +45,8 @@ public class GoodsReceiptService {
 
 		if (TotalReceived + gr.getReceivedQuantity() == po.getQuantity()) {
 			gr.setGrStatus("RECEIVED");
+			po.setPoStatus("GR_COMPLETED");
+			poRepo.save(po);
 		} else {
 			gr.setGrStatus("PARTIAL");
 		}
