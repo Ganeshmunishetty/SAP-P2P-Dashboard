@@ -43,10 +43,18 @@ public class InvoiceService {
 	    invoice.setInvoiceAmount(calculatedAmount);
 
 	    // Determine initial status for the new IR
-	    if (totalGRQty == po.getQuantity()) {
-	        invoice.setInvoiceStatus("MATCHED"); // final GR already completed
+	    if (totalGRQty == po.getQuantity() && calculatedAmount == po.getNetPrice()) {
+	        invoice.setInvoiceStatus("MATCHED");
+
+	        //  Update all previous IRs for the same PO to MATCHED
+	        List<Invoice> oldIRs = irRepo.findByPoNumber(invoice.getPoNumber());
+	        for (Invoice old : oldIRs) {
+	            old.setInvoiceStatus("MATCHED");
+	            irRepo.save(old);
+	        }
+
 	    } else {
-	        invoice.setInvoiceStatus("BLOCKED"); // partial GR
+	        invoice.setInvoiceStatus("BLOCKED");
 	    }
 
 	    return irRepo.save(invoice);
