@@ -33,7 +33,8 @@ public class PurchaseRequisitionService {
 
 	public PurchaseRequisition updatePrByPrNumber(String prNumber, PurchaseRequisition pr) {
 
-		PurchaseRequisition existing = getByPrNumber(prNumber);
+		PurchaseRequisition existing= prRepo.findByPrNumber(prNumber)
+	            .orElseThrow(() -> new RuntimeException("PR Not Found: " + prNumber));
 
 		existing.setPrNumber(pr.getPrNumber());
 		existing.setMaterial(pr.getMaterial());

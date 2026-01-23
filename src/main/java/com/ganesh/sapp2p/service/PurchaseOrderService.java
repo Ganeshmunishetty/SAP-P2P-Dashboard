@@ -41,8 +41,8 @@ public class PurchaseOrderService {
 	}
 
 	public PurchaseOrder updatePoNumber(String poNumber, PurchaseOrder po) {
-		PurchaseOrder existing = getByPoNumber(poNumber);
-
+		PurchaseOrder existing = poRepo.findByPoNumber(poNumber)
+	            .orElseThrow(() -> new RuntimeException("PO Not Found: " + poNumber));
 		existing.setNetPrice(po.getNetPrice());
 		existing.setPrNumber(po.getPrNumber());
 		existing.setQuantity(po.getQuantity());

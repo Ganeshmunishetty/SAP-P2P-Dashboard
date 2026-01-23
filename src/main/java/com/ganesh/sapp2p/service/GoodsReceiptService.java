@@ -28,58 +28,81 @@ public class GoodsReceiptService {
 		this.irRepo = irRepo;
 	}
 
-	public GoodsReceipt createGR(GoodsReceipt gr) {
-		PurchaseOrder po = poRepo.findByPoNumber(gr.getPoNumber())
-				.orElseThrow(() -> new RuntimeException("PO number Not Found " + gr.getPoNumber()));
+	 public GoodsReceipt createGR(GoodsReceipt gr) {
+	        PurchaseOrder po = poRepo.findByPoNumber(gr.getPoNumber())
+	                .orElseThrow(() -> new RuntimeException("PO Not Found: " + gr.getPoNumber()));
 
-		if(po.getPoStatus().equals("GR_Completed")||po.getPoNumber().equals("IR_Completed")) {
-			throw new RuntimeException("GR not allowed. PO already Completed.");
-		}
-		
-		int TotalReceived = grRepo.findByPoNumber(gr.getPoNumber()).stream().mapToInt(GoodsReceipt::getReceivedQuantity)
-				.sum();
+	        // Prevent GR creation if PO is completed
+	        if ("GR_COMPLETED".equals(po.getPoStatus())) {
+	            throw new RuntimeException("GR not allowed. PO already Completed.");
+	        }
 
-		if (TotalReceived + gr.getReceivedQuantity() > po.getQuantity()) {
-			throw new RuntimeException("GR Quantity Exceeds PO Quantity");
-		}
+	        // Calculate total received quantity
+	        int totalReceived = grRepo.findByPoNumber(gr.getPoNumber())
+	                .stream()
+	                .mapToInt(GoodsReceipt::getReceivedQuantity)
+	                .sum();
 
-		if (TotalReceived + gr.getReceivedQuantity() == po.getQuantity()) {
+	        if (totalReceived + gr.getReceivedQuantity() > po.getQuantity()) {
+	            throw new RuntimeException("GR Quantity Exceeds PO Quantity");
+	        }
+
+	        // Set GR status
+	        if (totalReceived + gr.getReceivedQuantity() == po.getQuantity()) {
+	            gr.setGrStatus("RECEIVED");
+	            po.setPoStatus("GR_COMPLETED");
+	            poRepo.save(po);
+	        } else {
+	            gr.setGrStatus("PARTIAL");
+	        }
+
+	        // Auto-generate GR number
+	        if (gr.getGrNumber() == null || gr.getGrNumber().isEmpty()) {
+	            int nextGrCount = grRepo.findByPoNumber(gr.getPoNumber()).size() + 1;
+	            gr.setGrNumber(po.getPoNumber() + "-GR" + nextGrCount);
+	        }
+
+	        GoodsReceipt savedGr = grRepo.save(gr);
+
+	        // Update PR if final GR received
+	        if ("RECEIVED".equals(gr.getGrStatus())) {
+	            PurchaseRequisition pr = prRepo.findByPrNumber(po.getPrNumber())
+	                    .orElseThrow(() -> new RuntimeException("PR not found for PO: " + po.getPoNumber()));
+	            pr.setStatus("COMPLETED");
+	            prRepo.save(pr);
+	        }
+
+	        return savedGr;
+	    }
+
+
+	private void completeProcess(String poNumber) {
+
+		PurchaseOrder po = poRepo.findByPoNumber(poNumber).orElseThrow(() -> new RuntimeException("PO not found"));
+
+		List<GoodsReceipt> grs = grRepo.findByPoNumber(poNumber);
+		List<Invoice> invoices = irRepo.findByPoNumber(poNumber);
+
+		// Update all GRs
+		for (GoodsReceipt gr : grs) {
 			gr.setGrStatus("RECEIVED");
-			po.setPoStatus("GR_COMPLETED");
-			poRepo.save(po);
-		} else {
-			gr.setGrStatus("PARTIAL");
+			grRepo.save(gr);
 		}
 
-		if (gr.getGrNumber() == null || gr.getGrNumber().isEmpty()) {
-			int nextGrCount = grRepo.findByPoNumber(gr.getPoNumber()).size() + 1;
-			gr.setGrNumber(gr.getPoNumber() + "-GR" + nextGrCount);
-		}
-		GoodsReceipt savedGr = grRepo.save(gr);
-		if (gr.getGrStatus().equals("Received")) {
-			PurchaseRequisition pr = prRepo.findByPrNumber(po.getPrNumber())
-					.orElseThrow(() -> new RuntimeException("PR not found for Po : " + po.getPoNumber()));
-			pr.setStatus("Completed");
-			prRepo.save(pr);
-		}
-		List<Invoice> invoices = irRepo.findByPoNumber(po.getPoNumber());
-		int totalGRQty = grRepo.findByPoNumber(po.getPoNumber()).stream().mapToInt(GoodsReceipt::getReceivedQuantity)
-				.sum();
-
-		double unitPrice = po.getNetPrice() / po.getQuantity();
-//		double totalInvoiceAmount = totalGRQty * unitPrice;
-
-		for(Invoice inv:invoices) {
-		inv.setInvoiceAmount(totalGRQty*unitPrice);
-
-			if (totalGRQty == po.getQuantity()) {
-				inv.setInvoiceStatus("MATCHED");
-			} else {
-				inv.setInvoiceStatus("BLOCKED");
-			}
+		// Update all IRs
+		for (Invoice inv : invoices) {
+			inv.setInvoiceStatus("COMPLETED");
 			irRepo.save(inv);
-		};
-		return grRepo.save(gr);
+		}
+
+		// PO + PR
+		po.setPoStatus("COMPLETED");
+		poRepo.save(po);
+
+		PurchaseRequisition pr = prRepo.findByPrNumber(po.getPrNumber())
+				.orElseThrow(() -> new RuntimeException("PR not found"));
+		pr.setStatus("COMPLETED");
+		prRepo.save(pr);
 	}
 
 	public List<GoodsReceipt> getAllGRs() {

@@ -27,11 +27,11 @@ public class InvoiceService {
 
 	public Invoice createIR(Invoice invoice) {
 	    PurchaseOrder po = poRepo.findByPoNumber(invoice.getPoNumber())
-	            .orElseThrow(() -> new RuntimeException("PO not Found: " + invoice.getPoNumber()));
+	        .orElseThrow(() -> new RuntimeException("PO not Found: " + invoice.getPoNumber()));
 
 	    // Auto-generate IR number
 	    if (invoice.getInvoiceNumber() == null || invoice.getInvoiceNumber().isEmpty()) {
-	        int nextIR = irRepo.findByPoNumber(invoice.getPoNumber()).size() + 1;
+	        int nextIR = irRepo.findByPoNumber(po.getPoNumber()).size() + 1;
 	        invoice.setInvoiceNumber(po.getPoNumber() + "-IR" + nextIR);
 	    }
 
@@ -43,14 +43,15 @@ public class InvoiceService {
 	    invoice.setInvoiceAmount(calculatedAmount);
 
 	    // Determine initial status for the new IR
-	    if (totalGRQty == po.getQuantity()&& calculatedAmount == po.getNetPrice()) {
-	        invoice.setInvoiceStatus("MATCHED");
+	    if (totalGRQty == po.getQuantity()) {
+	        invoice.setInvoiceStatus("MATCHED"); // final GR already completed
 	    } else {
-	        invoice.setInvoiceStatus("BLOCKED");
+	        invoice.setInvoiceStatus("BLOCKED"); // partial GR
 	    }
 
 	    return irRepo.save(invoice);
 	}
+
 
 	public List<Invoice> getAllIRs() {
 		return irRepo.findAll();
